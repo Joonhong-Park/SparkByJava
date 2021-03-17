@@ -9,11 +9,11 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import scala.Tuple2;
-import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.SQLContext;
 
 
 public class ReadByIF {
@@ -33,24 +33,37 @@ public class ReadByIF {
         JavaSparkContext sc = new JavaSparkContext(sparkconf);
 
         Configuration conf = new Configuration();
-        
+
         JavaPairRDD<LongWritable, FlightDataWritable> lines = sc.newAPIHadoopFile(args[0], FlightDataInputFormat.class, LongWritable.class, FlightDataWritable.class, conf);
 
-        JavaRDD<FlightDataWritable> fulldata = lines.map(v1 -> v1._2);
+        JavaRDD<Row> fulldata = lines.map(v1 -> {
+            FlightDataWritable flightDataWritable = v1._2;
+            String count = flightDataWritable.getCount();
+            String dest_country_name = flightDataWritable.getDEST_COUNTRY_NAME();
+            String origin_country_name = flightDataWritable.getORIGIN_COUNTRY_NAME();
+            return new GenericRow(new Object[]{dest_country_name, origin_country_name, count});
+        });
 
 //        FlightDataWritable head = fulldata.first();
 //
 //        JavaRDD<FlightDataWritable> data_nohead = fulldata.filter(v1 -> v1 != head);
 
-//        StructType schema = new StructType();
-//        schema.add(DataTypes.createStructField(head.getDEST_COUNTRY_NAME(), DataTypes.StringType, true));
-//        schema.add(DataTypes.createStructField(head.getORIGIN_COUNTRY_NAME(), DataTypes.StringType, true));
-//        schema.add(DataTypes.createStructField(head.getCount(), DataTypes.StringType, true));
+        StructField field1 = DataTypes.createStructField("DEST_COUNTRY_NAME", DataTypes.StringType, true);
+        StructType schema = new StructType(
+//                new StructField[]{
+//                        field1,
+//                        DataTypes.createStructField("ORIGIN_COUNTRY_NAME", DataTypes.StringType, true),
+//                        DataTypes.createStructField("Count", DataTypes.StringType, true)
+//                }
+        );
+        schema.add(field1);
+        schema.add(DataTypes.createStructField("ORIGIN_COUNTRY_NAME", DataTypes.StringType, true));
+        schema.add(DataTypes.createStructField("Count", DataTypes.StringType, true));
 //
-//        SQLContext sqc = new SQLContext(sc);
+        SQLContext spark = new SQLContext(sc);
 //        Dataset<Row> df = sqc.createDataFrame();
-
-
+        Dataset<Row> df = spark.createDataFrame(fulldata, schema);
+//        Dataset<Row> df = spark.createDataFrame(fulldata, AB.class);
 
         for (Tuple2<LongWritable, FlightDataWritable> line : lines.take(10)) {
             FlightDataWritable fdw = line._2;
